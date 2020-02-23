@@ -30,3 +30,14 @@
 *.exe
 *.out
 *.app
+
+# VS Intermediate & Debug Files
+*.idb
+*.pdb
+*.log
+*.ilk
+*.tlog
+
+# VS Temp Files
+.vs/*
+*.user
