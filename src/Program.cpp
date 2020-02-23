@@ -1,5 +1,7 @@
 #include "Program.h"
 
+#include "Mp4File.h"
+
 
 namespace MetaMovie {
 namespace {
@@ -43,5 +45,5 @@ OptionAdapterVector& Program::getOptionAdapters()  {
   return options;
 }
 
-void Program::run() {}
+void Program::run() { Mp4File file(inputPath); }
 }  // namespace MetaMovie
