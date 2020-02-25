@@ -153,5 +153,9 @@ Mp4File::Mp4File(std::string const& path) : path(path) {
   ManagedFile file(path, std::ios_base::in | std::ios_base::binary);
   std::fstream& stream = file.get();
   parseBlocks(stream, blockHandlers);
+  std::cout << "Parse successful." << std::endl;
 }
+
+Mp4File::Metadata Mp4File::getMetadata() { return metadata; }
+void Mp4File::setMetadata(Metadata metadataIn) { metadata = metadataIn; }
 }  // namespace MetaMovie
