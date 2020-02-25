@@ -40,12 +40,12 @@ T streamRead(std::fstream& stream, Endian endian) {
 class BlockHandler {
  public:
   virtual bool canHandle(std::string const& type) const = 0;
-  virtual void handle(std::fstream& stream, uint32_t size) = 0;
+  virtual void parse(std::fstream& stream, uint32_t size) = 0;
 };
 using BlockHandlerPtr = std::unique_ptr<BlockHandler>;
 class SkipBlockHandler : public BlockHandler {
   bool canHandle(std::string const& /*type*/) const override { return true; }
-  void handle(std::fstream& /*stream*/, uint32_t /*size*/) override{};
+  void parse(std::fstream& /*stream*/, uint32_t /*size*/) override{};
 };
 class MvhdHeaderHandler : public BlockHandler {
  public:
@@ -53,7 +53,7 @@ class MvhdHeaderHandler : public BlockHandler {
   bool canHandle(std::string const& type) const override {
     return "mvhd" == type;
   }
-  void handle(std::fstream& stream, uint32_t size) override {
+  void parse(std::fstream& stream, uint32_t size) override {
     auto const pos = stream.tellg();
     auto const version = streamRead<uint8_t>(stream, Endian::LITTLE);
     auto const empty1 = streamRead<uint8_t>(stream, Endian::LITTLE);
@@ -111,7 +111,7 @@ class HeaderBlockHandler : public BlockHandler {
   bool canHandle(std::string const& type) const override {
     return FILE_HEADER == type;
   }
-  void handle(std::fstream& stream, uint32_t size) override {
+  void parse(std::fstream& stream, uint32_t size) override {
     std::array<BlockHandlerPtr, 2> handlers{
         std::make_unique<MvhdHeaderHandler>(metadata),
         std::make_unique<SkipBlockHandler>()};
@@ -121,7 +121,7 @@ class HeaderBlockHandler : public BlockHandler {
       auto const position = stream.tellg();
       auto const blockSize = streamRead<uint32_t>(stream, Endian::BIG);
       auto& handler = getHandler(handlers, stream);
-      handler.handle(stream, blockSize);
+      handler.parse(stream, blockSize);
 
       if (stream.tellg() != position + static_cast<std::streampos>(blockSize))
         stream.seekg(position + static_cast<std::streampos>(blockSize));
@@ -139,7 +139,7 @@ void parseBlocks(std::fstream& stream,
     auto const position = stream.tellg();
     auto const blockSize = streamRead<uint32_t>(stream, Endian::BIG);
     auto& handler = getHandler(handlers, stream);
-    handler.handle(stream, blockSize);
+    handler.parse(stream, blockSize);
     stream.seekg(position + static_cast<std::streampos>(blockSize));
   }
 }
