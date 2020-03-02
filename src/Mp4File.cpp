@@ -36,16 +36,28 @@ T streamRead(std::fstream& stream, Endian endian) {
   std::memcpy(&result, data.get(), size);
   return result;
 }
+template <typename T>
+void streamWrite(T const& value, std::fstream& stream, Endian endian) {
+  stream.seekp(stream.tellg());
+  size_t const size = sizeof(T) / sizeof(char);
+  auto data = std::make_unique<char[]>(size);
+  std::memcpy(data.get(), &value, size);
+  if (endian == Endian::BIG) std::reverse(data.get(), data.get() + size);
+  stream.write(data.get(), size);
+  stream.seekg(stream.tellp());
+}
 
 class BlockHandler {
  public:
   virtual bool canHandle(std::string const& type) const = 0;
   virtual void parse(std::fstream& stream, uint32_t size) = 0;
+  virtual void update(std::fstream& stream, uint32_t size) = 0;
 };
 using BlockHandlerPtr = std::unique_ptr<BlockHandler>;
 class SkipBlockHandler : public BlockHandler {
   bool canHandle(std::string const& /*type*/) const override { return true; }
   void parse(std::fstream& /*stream*/, uint32_t /*size*/) override{};
+  void update(std::fstream& stream, uint32_t size) override{};
 };
 class MvhdHeaderHandler : public BlockHandler {
  public:
@@ -85,6 +97,16 @@ class MvhdHeaderHandler : public BlockHandler {
     auto const currentTime = streamRead<uint32_t>(stream, Endian::BIG);
     auto const nextTrackId = streamRead<uint32_t>(stream, Endian::BIG);
     assert(stream.tellg() == pos + static_cast<std::streampos>(size - 8));
+  };
+  void update(std::fstream& stream, uint32_t size) override {
+    auto const version = streamRead<uint8_t>(stream, Endian::LITTLE);
+    auto const empty1 = streamRead<uint8_t>(stream, Endian::LITTLE);
+    auto const empty2 = streamRead<uint16_t>(stream, Endian::LITTLE);
+    streamWrite<uint32_t>(static_cast<uint32_t>(metadata.created + 2082844800u),
+                          stream, Endian::BIG);
+    streamWrite<uint32_t>(
+        static_cast<uint32_t>(metadata.modified + 2082844800u), stream,
+        Endian::BIG);
   };
 
  private:
@@ -127,6 +149,22 @@ class HeaderBlockHandler : public BlockHandler {
         stream.seekg(position + static_cast<std::streampos>(blockSize));
     }
   }
+  void update(std::fstream& stream, uint32_t size) override {
+    std::array<BlockHandlerPtr, 2> handlers{
+        std::make_unique<MvhdHeaderHandler>(metadata),
+        std::make_unique<SkipBlockHandler>()};
+
+    auto const endPos = stream.tellg() + static_cast<std::streampos>(size - 8);
+    while (stream.tellg() < endPos) {
+      auto const position = stream.tellg();
+      auto const blockSize = streamRead<uint32_t>(stream, Endian::BIG);
+      auto& handler = getHandler(handlers, stream);
+      handler.update(stream, blockSize);
+
+      if (stream.tellg() != position + static_cast<std::streampos>(blockSize))
+        stream.seekg(position + static_cast<std::streampos>(blockSize));
+    }
+  }
 
  private:
   Mp4File::Metadata& metadata;
@@ -158,4 +196,26 @@ Mp4File::Mp4File(std::string const& path) : path(path) {
 
 Mp4File::Metadata Mp4File::getMetadata() { return metadata; }
 void Mp4File::setMetadata(Metadata metadataIn) { metadata = metadataIn; }
+
+template <size_t N>
+void updateBlocks(std::fstream& stream,
+                  std::array<BlockHandlerPtr, N>& handlers) {
+  while (stream.peek() != std::char_traits<char>::eof()) {
+    auto const position = stream.tellg();
+    auto const blockSize = streamRead<uint32_t>(stream, Endian::BIG);
+    auto& handler = getHandler(handlers, stream);
+    handler.update(stream, blockSize);
+    stream.seekg(position + static_cast<std::streampos>(blockSize));
+  }
+}
+
+void Mp4File::write() {
+  std::array<BlockHandlerPtr, 2> blockHandlers{
+      std::make_unique<HeaderBlockHandler>(metadata),
+      std::make_unique<SkipBlockHandler>()};
+  ManagedFile file(
+      path, std::ios_base::in | std::ios_base::out | std::ios_base::binary);
+  std::fstream& stream = file.get();
+  updateBlocks(stream, blockHandlers);
+}
 }  // namespace MetaMovie

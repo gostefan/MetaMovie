@@ -13,9 +13,10 @@ class Mp4File final {
     std::time_t created;
     std::time_t modified;
   };
-
   Metadata getMetadata();
   void setMetadata(Metadata metadata);
+
+  void write();
 
  private:
   std::string path;

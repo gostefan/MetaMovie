@@ -81,5 +81,6 @@ void Program::run() {
   metadata.created = mktime(&createdTime);
   metadata.modified = mktime(&modifiedTime);
   file.setMetadata(metadata);
+  file.write();
 }
 }  // namespace MetaMovie
